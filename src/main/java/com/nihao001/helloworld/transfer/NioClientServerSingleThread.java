@@ -8,6 +8,9 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedList;
@@ -27,7 +30,21 @@ public class NioClientServerSingleThread {
 	private static final Logger logger = Logger.getAnonymousLogger();
 
 	public static void main(String[] args) {
-		new NioClientServerSingleThread().startClient();
+		Config config = null;
+        if (args.length == 2) {
+            if (args[0].equals("--config")) {
+                Path path = Paths.get(args[1]);
+                try {
+                    String json = new String(Files.readAllBytes(path));
+                    config = new Config();
+                    config.loadFromString(json);
+                } catch (IOException e) {
+                    System.out.println("Unable to read configuration file: " + args[1]);
+                    return;
+                }
+            }
+        }
+		new NioClientServerSingleThread().startClient(config);
 	}
 	
 	/**
@@ -35,17 +52,19 @@ public class NioClientServerSingleThread {
 	 * 
 	 * @return
 	 */
-	private Config getConfig(){
-		String json = Utils.getFileContent(Constant.CONFIG_FILE);
-		Config config = new Config();
-		config.loadFromString(json);
+	private Config getConfig(Config config){
+		if(config == null){
+			String json = Utils.getFileContent(Constant.CONFIG_FILE);
+			config = new Config();
+			config.loadFromString(json);
+		}
 		Utils.saveFile(Constant.CONFIG_FILE, config.generateJsonString());
 		return config;
 	}
 	
-	public void startClient(){
+	public void startClient(Config conf){
 		try {
-			Config config = getConfig();
+			Config config = getConfig(conf);
 			List<ClientChannelHandler> handlerList = new LinkedList<ClientChannelHandler>();
 			Selector selector = Selector.open();
 			ServerSocketChannel serverSocketChannel = ServerSocketChannel
@@ -250,33 +269,35 @@ class ClientChannelHandler {
 	}
 
 	public void handle(SelectionKey key) {
-		if(lastExecuteTime == -1){
-			lastExecuteTime = System.currentTimeMillis();
-		}
-		if((System.currentTimeMillis() - lastExecuteTime) >= Constant.TIME_OUT ){
-			logger.info("timeout to connect " + (this.packageHeader == null ? "" : this.packageHeader.getAddress()));
-			this.destroy = true;
-			return;
-		}
-		SocketChannel channel = (SocketChannel) key.channel();
-		if (channel == this.localSocketChannel
-				|| channel == this.remoteSocketChannel) {
-			try {
-				if (key.isReadable()) {
-					read(key, channel);
-				}
-				if (key.isWritable()) {
-					write(key, channel);
-				}
-				if (key.isConnectable()) {
-					connect(key, channel);
-				}
-				
-			} catch (Exception e) {
-				this.destroy = true;
-			}
-		}
+        if(lastExecuteTime != -1 && (System.currentTimeMillis() - lastExecuteTime) >= Constant.TIME_OUT ){
+            logger.info("timeout to connect " + (this.packageHeader == null ? "" : this.packageHeader.getAddress()));
+            this.destroy = true;
+            return;
+        }
+        SocketChannel channel = (SocketChannel) key.channel();
+        if (channel == this.localSocketChannel
+                || channel == this.remoteSocketChannel) {
+            try {
+                if (key.isReadable()) {
+                    read(key, channel);
+                }
+                if (key.isWritable()) {
+                    write(key, channel);
+                }
+                if (key.isConnectable()) {
+                    connect(key, channel);
+                }
+                
+            } catch (Exception e) {
+                this.destroy = true;
+            }
+        }
+        
+        if(key.isReadable() || key.isWritable() || key.isConnectable()){
+            lastExecuteTime = System.currentTimeMillis();
+        }
 	}
+			
 
 	public boolean isDestroy() {
 		return destroy;
