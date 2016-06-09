@@ -287,14 +287,10 @@ class ClientChannelHandler {
                 if (key.isConnectable()) {
                     connect(key, channel);
                 }
-                
+                lastExecuteTime = System.currentTimeMillis();
             } catch (Exception e) {
                 this.destroy = true;
             }
-        }
-        
-        if(key.isReadable() || key.isWritable() || key.isConnectable()){
-            lastExecuteTime = System.currentTimeMillis();
         }
 	}
 			
