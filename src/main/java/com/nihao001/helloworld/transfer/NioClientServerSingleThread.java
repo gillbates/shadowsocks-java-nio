@@ -22,10 +22,11 @@ import com.nihao001.helloworld.cipher.ICrypt;
 import com.nihao001.helloworld.utils.Config;
 import com.nihao001.helloworld.utils.Constant;
 import com.nihao001.helloworld.utils.PackageHeader;
+import com.nihao001.helloworld.utils.Socks5Utils;
 import com.nihao001.helloworld.utils.Utils;
 
 
-public class NioClientServerSingleThread {
+public class NioClientServerSingleThread{
 
 	private static final Logger logger = Logger.getAnonymousLogger();
 
@@ -93,7 +94,18 @@ public class NioClientServerSingleThread {
 						handlerList.add(new ClientChannelHandler(selector,
 								socketChannel, config));
 					} else {
-						// logger.info("handler number:" + handlerList.size());
+						logger.info("before handler number:" + handlerList.size());
+						/*
+						Iterator<ClientChannelHandler> it = handlerList.iterator();
+						while(it.hasNext()){
+							ClientChannelHandler handler = it.next();
+							handler.handle(key);
+							if(handler.isDestroy()){
+								handler.destory();
+								it.remove();
+							}
+						}
+						*/
 						List<ClientChannelHandler> toDestoryList = new LinkedList<ClientChannelHandler>();
 						for (ClientChannelHandler handler : handlerList) {
 							handler.handle(key);
@@ -106,6 +118,8 @@ public class NioClientServerSingleThread {
 							handler.destory();
 							handlerList.remove(handler);
 						}
+						
+						logger.info("after handler number:" + handlerList.size());
 					}
 				}
 			}
@@ -114,15 +128,17 @@ public class NioClientServerSingleThread {
 			e.printStackTrace();
 		}
 	}
+
+	
 }
 
 class ClientChannelHandler {
 	private static final Logger logger = Logger.getAnonymousLogger();
 	
-	private static final int STAGE_INIT = 0;
-	private static final int STAGE_SOCKS_HELLO_OK = 1;
-	private static final int STAGE_TARGET_SENT_TO_REMOTE = 2;
-	private static final int STAGE_REMOTE_CONNECTED = 3;
+	private static final int STAGE_INIT 					= 0;
+	private static final int STAGE_SOCKS_HELLO_OK 			= 1;
+	private static final int STAGE_TARGET_SENT_TO_REMOTE 	= 2;
+	private static final int STAGE_REMOTE_CONNECTED 		= 3;
 	
 	private Selector selector;
 	private SocketChannel localSocketChannel;
@@ -194,11 +210,11 @@ class ClientChannelHandler {
 			byte socksVer = data[0];
 			if (socksVer != 5) {
 				// socks5 version is wrong.
-				socketChannel.write(ByteBuffer.wrap(new byte[] { (byte) 5, (byte) 255 }));
+				socketChannel.write(ByteBuffer.wrap(Socks5Utils.versionError()));
 				this.destroy = true;
 			} else {
 				// socks5 version is ok.
-				socketChannel.write(ByteBuffer.wrap(new byte[] { (byte) 5, (byte) 0 }));
+				socketChannel.write(ByteBuffer.wrap(Socks5Utils.versionOk()));
 				stage = STAGE_SOCKS_HELLO_OK;
 			}
 		} 
@@ -213,12 +229,12 @@ class ClientChannelHandler {
 			} catch (Exception e) {
 				logger.severe("fail to connnect remote proxy server.");
 				// tell socks5 client, fail to connect.
-				socketChannel.write(ByteBuffer.wrap(new byte[]{5, 8, 0, 1, 0, 0, 0, 0, 1, 1}));
+				socketChannel.write(ByteBuffer.wrap(Socks5Utils.connectServerError()));
 				this.destroy = true;
 				return;
 			}
 			// tell socks5 client, success to connect.
-			socketChannel.write(ByteBuffer.wrap(new byte[]{5, 0, 0, 1, 0, 0, 0, 0, 1, 1}));
+			socketChannel.write(ByteBuffer.wrap(Socks5Utils.connectServerSuccess()));
 			
 			this.packageHeader = Utils.parserHeader(data);
 			if(this.packageHeader != null){
@@ -230,7 +246,8 @@ class ClientChannelHandler {
 			stage = STAGE_TARGET_SENT_TO_REMOTE;
 		}
 		else if(stage == STAGE_TARGET_SENT_TO_REMOTE && socketChannel == this.localSocketChannel){
-			// add the received data into queue when this client is starting to connect proxy server but not connected.
+			// add the received data into queue 
+			// when this client is starting to connect proxy server but not connected.
 			byteQueue.add(data);
 		}
 		else if(stage == STAGE_REMOTE_CONNECTED){

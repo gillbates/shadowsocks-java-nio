@@ -40,9 +40,4 @@ public class PackageHeader {
 				+ address + ", port=" + Utils.byteToPort(port) + ", headerLength=" + headerLength
 				+ "]";
 	}
-	
-	
-	
-	
-	
 }
